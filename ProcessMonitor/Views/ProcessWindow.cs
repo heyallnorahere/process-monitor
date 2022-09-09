@@ -18,7 +18,7 @@ using System;
 using System.Diagnostics;
 using Terminal.Gui;
 
-namespace ProcessMonitor
+namespace ProcessMonitor.Views
 {
     public sealed class ProcessWindow : Window
     {
@@ -104,15 +104,15 @@ namespace ProcessMonitor
             contentView.Add(mStatusLabel);
 
             const int padding = 2;
-            const string buttonText = "Close";
+            const string closeButtonText = "Close";
 
             var closeButton = new Button
             {
                 X = Pos.Center(),
                 Y = Pos.Bottom(contentView) - 1,
-                Width = buttonText.Length + (padding * 2),
+                Width = closeButtonText.Length + padding * 2,
                 Height = 1,
-                Text = buttonText
+                Text = closeButtonText
             };
 
             closeButton.Clicked += Close;

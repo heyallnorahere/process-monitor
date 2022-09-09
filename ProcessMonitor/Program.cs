@@ -14,6 +14,7 @@
    limitations under the License.
 */
 
+using ProcessMonitor.Views;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -43,7 +44,7 @@ namespace ProcessMonitor
         public static void Quit()
         {
             sProcessWindows.ToList().ForEach(pair => pair.Value.Close());
-            Application.Top.Running = false;
+            Application.RequestStop();
         }
 
         public static void OpenProcess(Process process)

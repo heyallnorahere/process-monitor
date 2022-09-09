@@ -17,7 +17,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Threading;
 
 namespace ProcessMonitor
@@ -48,8 +47,10 @@ namespace ProcessMonitor
                 return false;
             }
 
-            sWatcherThread = new Thread(WatchProcesses);
-            sWatcherThread.Name = "Process watcher";
+            sWatcherThread = new Thread(WatchProcesses)
+            {
+                Name = "Process watcher"
+            };
 
             sWatcherThread.Start();
             return true;
@@ -68,11 +69,12 @@ namespace ProcessMonitor
             return true;
         }
 
+        public const int SleepInterval = 100;
         private static void WatchProcesses()
         {
             while (!sStopWatching)
             {
-                var processes = Process.GetProcesses().ToList();
+                var processes = Process.GetProcesses();
 
                 var newProcesses = new List<Process>();
                 var stoppedProcesses = new List<int>();
@@ -88,7 +90,7 @@ namespace ProcessMonitor
 
                 foreach (var id in sProcesses.Keys)
                 {
-                    if (processes.Find(process => process.Id == id) == null)
+                    if (Array.Find(processes, process => process.Id == id) == null)
                     {
                         stoppedProcesses.Add(id);
                         OnProcessStopped?.Invoke(id);
@@ -98,7 +100,7 @@ namespace ProcessMonitor
                 newProcesses.ForEach(process => sProcesses.Add(process.Id, process));
                 stoppedProcesses.ForEach(id => sProcesses.Remove(id));
 
-                Thread.Sleep(50);
+                Thread.Sleep(SleepInterval);
             }
 
             sStopWatching = false;

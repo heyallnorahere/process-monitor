@@ -20,7 +20,7 @@ using System.Diagnostics;
 using System.Linq;
 using Terminal.Gui;
 
-namespace ProcessMonitor
+namespace ProcessMonitor.Views
 {
     public sealed class ProcessView : FrameView
     {
@@ -91,6 +91,8 @@ namespace ProcessMonitor
                 mProcesses.Add(process);
                 mProcessListChanged = true;
             }
+
+            Application.MainLoop.Invoke(ReloadProcessList);
         }
 
         private void RemoveProcess(int id)
@@ -100,6 +102,8 @@ namespace ProcessMonitor
                 mProcesses.RemoveAll(process => process.Id == id);
                 mProcessListChanged = true;
             }
+
+            Application.MainLoop.Invoke(ReloadProcessList);
         }
 
         private void OpenProcess(ListViewItemEventArgs args)

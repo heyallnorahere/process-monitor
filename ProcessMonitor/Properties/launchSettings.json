@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ProcessMonitor": {
+      "commandName": "Project",
+      "workingDirectory": "$(SolutionDir)"
+    }
+  }
+}
