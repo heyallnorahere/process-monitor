@@ -45,7 +45,7 @@ namespace ProcessMonitor.Tests
             }
         }
 
-        private static Process RunCommand(string command)
+        private static void RunCommand(string command, out Process process)
         {
             bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
             var startInfo = new ProcessStartInfo
@@ -59,13 +59,12 @@ namespace ProcessMonitor.Tests
             startInfo.ArgumentList.Add(isWindows ? "/c" : "-c");
             startInfo.ArgumentList.Add(command);
 
-            var process = new Process
+            process = new Process
             {
                 StartInfo = startInfo
             };
 
             process.Start();
-            return process;
         }
 
         [Fact]
@@ -110,7 +109,7 @@ namespace ProcessMonitor.Tests
             Monitor.OnNewProcess += onNew;
             Monitor.OnProcessStopped += onStopped;
 
-            startedProcess = RunCommand("python");
+            RunCommand("python3", out startedProcess);
 
             Assert.True(Monitor.IsWatching);
             Assert.True(autoResetEvent.WaitOne(Monitor.SleepInterval * 5), "OnNewProcess did not trigger");
@@ -138,9 +137,10 @@ namespace ProcessMonitor.Tests
 
         private static ProcessDataSet RecordSingleFrame(string command, params Type[] dataSetTypes)
         {
-            using var process = RunCommand(command);
+            RunCommand(command, out var process);
+            using var startedProcess = process;
 
-            var dataSet = new ProcessDataSet(process);
+            var dataSet = new ProcessDataSet(startedProcess);
             foreach (var type in dataSetTypes)
             {
                 var interfaces = type.GetInterfaces();
@@ -162,19 +162,25 @@ namespace ProcessMonitor.Tests
                 }
             }
 
+            if (startedProcess.HasExited)
+            {
+                string output = startedProcess.StandardOutput.ReadToEnd();
+                throw new Exception("Process already exited with output:\n" + output);
+            }
+
             if (!dataSet.Record())
             {
                 throw new Exception("Failed to record process data!");
             }
 
-            process.Kill();
+            startedProcess.Kill();
             return dataSet;
         }
 
         [Fact]
         public void ProcessDataSetBasic()
         {
-            var dataSet = RecordSingleFrame("python", typeof(ProcessMemoryDataSet));
+            var dataSet = RecordSingleFrame("python3", typeof(ProcessMemoryDataSet));
 
             var data = dataSet.Compile();
             Assert.Equal(1, data.Count);
@@ -183,7 +189,7 @@ namespace ProcessMonitor.Tests
         [Fact]
         public void ProcessDataSetExporting()
         {
-            var dataSet = RecordSingleFrame("python", typeof(ProcessMemoryDataSet));
+            var dataSet = RecordSingleFrame("python3", typeof(ProcessMemoryDataSet));
 
             var exporters = DataExporterAttribute.FindAll();
             var paths = new List<string?>();
