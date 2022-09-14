@@ -47,6 +47,25 @@ namespace ProcessMonitor.Diagnostics
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public sealed class DataExporterAttribute : Attribute
     {
+        public static IDataExporter Instantiate(Type exporterType)
+        {
+            string typeName = exporterType.FullName ?? exporterType.Name;
+
+            var interfaces = exporterType.GetInterfaces();
+            if (!interfaces.Contains(typeof(IDataExporter)))
+            {
+                throw new ArgumentException($"Type {typeName} does not implement IDataExporter!");
+            }
+
+            var constructor = exporterType.GetConstructor(BindingFlags.Public | BindingFlags.Instance, Array.Empty<Type>());
+            if (constructor == null)
+            {
+                throw new ArgumentException($"Type {typeName} does not have a public constructor with no parameters!");
+            }
+
+            return (IDataExporter)constructor.Invoke(null);
+        }
+
         public DataExporterAttribute()
         {
             DisplayName = string.Empty;

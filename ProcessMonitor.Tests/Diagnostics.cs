@@ -190,14 +190,13 @@ namespace ProcessMonitor.Tests
 
             foreach (var type in exporters.Keys)
             {
-                var constructor = type.GetConstructor(Array.Empty<Type>());
-                Assert.NotNull(constructor);
-
-                var exporter = (IDataExporter)constructor!.Invoke(null);
+                var exporter = DataExporterAttribute.Instantiate(type);
                 paths.Add(dataSet.Export(exporter));
             }
 
+            Assert.NotEmpty(paths);
             Assert.DoesNotContain(null, paths);
+
             paths.ForEach(path => File.Delete(path!));
         }
     }
