@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using Xunit;
 
@@ -14,10 +15,18 @@ namespace ProcessMonitor.Tests
     {
         private static int sInstanceCount;
         private static readonly object sLock;
+
+        private static readonly Type[] sDataSetTypes;
         static Diagnostics()
         {
             sInstanceCount = 0;
             sLock = new object();
+
+            sDataSetTypes = new Type[]
+            {
+                typeof(ProcessCPUDataSet),
+                typeof(ProcessMemoryDataSet)
+            };
         }
 
         public Diagnostics()
@@ -135,13 +144,13 @@ namespace ProcessMonitor.Tests
             }
         }
 
-        private static ProcessDataSet RecordSingleFrame(string command, params Type[] dataSetTypes)
+        private static ProcessDataSet RecordFrames(string command, int frameCount = 1, int delay = 1000)
         {
             RunCommand(command, out var process);
             using var startedProcess = process;
 
             var dataSet = new ProcessDataSet(startedProcess);
-            foreach (var type in dataSetTypes)
+            foreach (var type in sDataSetTypes)
             {
                 var interfaces = type.GetInterfaces();
                 if (!interfaces.Contains(typeof(IAttributeDataSet)))
@@ -162,15 +171,23 @@ namespace ProcessMonitor.Tests
                 }
             }
 
-            if (startedProcess.HasExited)
+            for (int i = 0; i < frameCount; i++)
             {
-                string output = startedProcess.StandardOutput.ReadToEnd();
-                throw new Exception("Process already exited with output:\n" + output);
-            }
+                if (startedProcess.HasExited)
+                {
+                    string output = startedProcess.StandardOutput.ReadToEnd();
+                    throw new Exception("Process already exited with output:\n" + output);
+                }
 
-            if (!dataSet.Record())
-            {
-                throw new Exception("Failed to record process data!");
+                if (i > 0)
+                {
+                    Thread.Sleep(delay);
+                }
+
+                if (!dataSet.Record())
+                {
+                    throw new Exception("Failed to record process data!");
+                }
             }
 
             startedProcess.Kill();
@@ -180,20 +197,24 @@ namespace ProcessMonitor.Tests
         [Fact]
         public void ProcessDataSetBasic()
         {
-            var dataSet = RecordSingleFrame("python3", typeof(ProcessMemoryDataSet));
+            var dataSet = RecordFrames("python3");
 
             var data = dataSet.Compile();
-            Assert.Equal(1, data.Count);
+            Assert.NotEqual(0, data.Count);
         }
 
         [Fact]
         public void ProcessDataSetExporting()
         {
-            var dataSet = RecordSingleFrame("python3", typeof(ProcessMemoryDataSet));
+            var script = new StringBuilder();
+            script.AppendLine("i = 0");
+            script.AppendLine("while True:");
+            script.AppendLine("\ti += 1");
 
-            var exporters = DataExporterAttribute.FindAll();
+            var dataSet = RecordFrames($"python3 -c \"{script.ToString().Replace("\"", "\\\"")}\"", 5);
             var paths = new List<string?>();
 
+            var exporters = DataExporterAttribute.FindAll();
             foreach (var type in exporters.Keys)
             {
                 var constructor = type.GetConstructor(Array.Empty<Type>());
