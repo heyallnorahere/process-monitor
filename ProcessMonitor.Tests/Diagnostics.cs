@@ -1,11 +1,12 @@
+using Mono.Unix;
 using ProcessMonitor.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using Xunit;
 
@@ -76,72 +77,131 @@ namespace ProcessMonitor.Tests
             process.Start();
         }
 
+        private static string CreateTemporaryScript(string name)
+        {
+            bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+            string filename = "Hang." + (isWindows ? "bat" : "sh");
+
+            var assembly = Assembly.GetExecutingAssembly();
+            string manifestName = $"{assembly.GetName().Name}.Scripts.{filename}";
+
+            string tempDir = Path.GetTempPath();
+            string scriptPath = Path.Join(tempDir, filename);
+
+            {
+                using var inputStream = assembly.GetManifestResourceStream(manifestName);
+                using var outputStream = new FileStream(scriptPath, FileMode.Create);
+
+                if (inputStream == null)
+                {
+                    throw new ArgumentException("Invalid script name!");
+                }
+
+                using var inputReader = new StreamReader(inputStream);
+                using var ouptutWriter = new StreamWriter(outputStream);
+
+                string? line;
+                while ((line = inputReader.ReadLine()) != null)
+                {
+                    ouptutWriter.WriteLine(line);
+                }
+
+                ouptutWriter.Flush();
+            }
+
+            if (!isWindows)
+            {
+                var fileInfo = new UnixFileInfo(scriptPath);
+                fileInfo.FileAccessPermissions |= FileAccessPermissions.UserExecute;
+            }
+
+            return scriptPath;
+        }
+
+        internal static void UseTemporaryScript(string name, Action<string> callback)
+        {
+            string path = CreateTemporaryScript(name);
+            callback(path);
+            File.Delete(path);
+        }
+
+        internal static T UseTemporaryScript<T>(string name, Func<string, T> callback)
+        {
+            string path = CreateTemporaryScript(name);
+            var result = callback(path);
+
+            File.Delete(path);
+            return result;
+        }
+
         [Fact]
         public void MonitorBasic()
         {
-            // just a test command that won't exit by itself
-            Process? startedProcess = null;
-            var autoResetEvent = new AutoResetEvent(false);
-
-            var onNew = (Process process) =>
+            UseTemporaryScript("Hang", scriptPath =>
             {
-                if (startedProcess == null)
+                Process? startedProcess = null;
+                var autoResetEvent = new AutoResetEvent(false);
+
+                var onNew = (Process process) =>
                 {
-                    return;
-                }
+                    if (startedProcess == null)
+                    {
+                        return;
+                    }
+
+                    lock (startedProcess)
+                    {
+                        if (process.Id == startedProcess.Id)
+                        {
+                            autoResetEvent.Set();
+                        }
+                    }
+                };
+
+                var onStopped = (int pid) =>
+                {
+                    if (startedProcess == null)
+                    {
+                        return;
+                    }
+
+                    lock (startedProcess)
+                    {
+                        if (pid == startedProcess.Id)
+                        {
+                            autoResetEvent.Set();
+                        }
+                    }
+                };
+
+                Monitor.OnNewProcess += onNew;
+                Monitor.OnProcessStopped += onStopped;
+
+                RunCommand(scriptPath, out startedProcess);
+
+                Assert.True(Monitor.IsWatching);
+                Assert.True(autoResetEvent.WaitOne(Monitor.SleepInterval * 5), "OnNewProcess did not trigger");
 
                 lock (startedProcess)
                 {
-                    if (process.Id == startedProcess.Id)
-                    {
-                        autoResetEvent.Set();
-                    }
+                    startedProcess.Kill();
+                    startedProcess.WaitForExit();
                 }
-            };
 
-            var onStopped = (int pid) =>
-            {
-                if (startedProcess == null)
+                Assert.True(autoResetEvent.WaitOne(Monitor.SleepInterval * 5), "OnProcessStopped did not trigger");
+
+                Monitor.OnNewProcess -= onNew;
+                Monitor.OnProcessStopped -= onStopped;
+
+                try
                 {
-                    return;
+                    startedProcess.Dispose();
                 }
-
-                lock (startedProcess)
+                catch (Exception)
                 {
-                    if (pid == startedProcess.Id)
-                    {
-                        autoResetEvent.Set();
-                    }
+                    // what do i do here lmao
                 }
-            };
-
-            Monitor.OnNewProcess += onNew;
-            Monitor.OnProcessStopped += onStopped;
-
-            RunCommand("python3", out startedProcess);
-
-            Assert.True(Monitor.IsWatching);
-            Assert.True(autoResetEvent.WaitOne(Monitor.SleepInterval * 5), "OnNewProcess did not trigger");
-
-            lock (startedProcess)
-            {
-                startedProcess.Kill();
-                startedProcess.WaitForExit();
-            }
-
-            Assert.True(autoResetEvent.WaitOne(Monitor.SleepInterval * 5), "OnProcessStopped did not trigger");
-
-            Monitor.OnNewProcess -= onNew;
-            Monitor.OnProcessStopped -= onStopped;
-
-            try
-            {
-                startedProcess.Dispose();
-            }
-            catch (Exception)
-            {
-                // what do i do here lmao
-            }
+            });
         }
 
         private static ProcessDataSet RecordFrames(string command, int frameCount = 1, int delay = 1000)
@@ -197,7 +257,7 @@ namespace ProcessMonitor.Tests
         [Fact]
         public void ProcessDataSetBasic()
         {
-            var dataSet = RecordFrames("python3");
+            var dataSet = UseTemporaryScript("Hang", scriptPath => RecordFrames(scriptPath));
 
             var data = dataSet.Compile();
             Assert.NotEqual(0, data.Count);
@@ -206,12 +266,7 @@ namespace ProcessMonitor.Tests
         [Fact]
         public void ProcessDataSetExporting()
         {
-            var script = new StringBuilder();
-            script.AppendLine("i = 0");
-            script.AppendLine("while True:");
-            script.AppendLine("\ti += 1");
-
-            var dataSet = RecordFrames($"python3 -c \"{script.ToString().Replace("\"", "\\\"")}\"", 5);
+            var dataSet = UseTemporaryScript("Hang", scriptPath => RecordFrames(scriptPath, 5));
             var paths = new List<string?>();
 
             var exporters = DataExporterAttribute.FindAll();
