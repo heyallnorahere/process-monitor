@@ -17,6 +17,7 @@
 using ProcessMonitor.Views;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -133,7 +134,14 @@ namespace ProcessMonitor
                 StartInfo = startInfo
             };
 
-            process.Start();
+            try
+            {
+                process.Start();
+            }
+            catch (Win32Exception)
+            {
+                // failed to launch process - it's fine
+            }
         }
 
         public static void ReloadProcessList() => sReloadProcessList?.Invoke();
@@ -170,7 +178,7 @@ namespace ProcessMonitor
                 new StatusItem(Key.CtrlMask | Key.Q, "~^Q~ Quit", QuitHandler),
                 new StatusItem(Key.CtrlMask | Key.R, "~^R~ Reload process list", sReloadProcessList),
                 new StatusItem(Key.Null, Process.GetCurrentProcess().Id.ToString(), null),
-                new StatusItem(Key.Null, "Report an issue", () => OpenURL("https://github.com/yodasoda1219/process-monitor/issues"))
+                new StatusItem(Key.Null, "Report an issue", () => OpenURL("https://github.com/yodasoda1219/process-monitor/issues/new"))
             });
 
             var top = Application.Top;

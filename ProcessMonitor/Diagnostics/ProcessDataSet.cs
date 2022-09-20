@@ -208,7 +208,7 @@ namespace ProcessMonitor.Diagnostics
                 lock (sThreadData)
                 {
                     int pid = mProcess.Id;
-                    return !sThreadData.ContainsKey(pid) || !sThreadData[pid].Callbacks.ContainsKey(mID);
+                    return sThreadData.ContainsKey(pid) && sThreadData[pid].Callbacks.ContainsKey(mID);
                 }
             }
         }

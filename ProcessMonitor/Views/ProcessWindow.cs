@@ -28,8 +28,8 @@ namespace ProcessMonitor.Views
         private const string TitleSuffix = " - Exited";
         public ProcessWindow(Process process)
         {
-            Width = Dim.Percent(50);
-            Height = Dim.Percent(75);
+            Width = 100;
+            Height = 30;
             CanFocus = true;
 
             ProcessObject = process;
@@ -144,9 +144,9 @@ namespace ProcessMonitor.Views
             contentView.Add(mDataSetView = new DataSetView(mDataSet)
             {
                 X = 0,
-                Y = 3,
+                Y = 4,
                 Width = Dim.Fill(),
-                Height = Dim.Fill(1)
+                Height = Dim.Fill(2)
             });
 
             const int padding = 2;
