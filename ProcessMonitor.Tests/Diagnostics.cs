@@ -151,9 +151,16 @@ namespace ProcessMonitor.Tests
 
                     lock (startedProcess)
                     {
-                        if (process.Id == startedProcess.Id)
+                        try
                         {
-                            autoResetEvent.Set();
+                            if (process.Id == startedProcess.Id)
+                            {
+                                autoResetEvent.Set();
+                            }
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            return;
                         }
                     }
                 };
