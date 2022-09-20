@@ -14,8 +14,11 @@
    limitations under the License.
 */
 
+using ProcessMonitor.Diagnostics;
 using System;
 using System.Diagnostics;
+using System.Linq;
+using System.Reflection;
 using Terminal.Gui;
 
 namespace ProcessMonitor.Views
@@ -42,15 +45,45 @@ namespace ProcessMonitor.Views
                 Program.ReloadProcessList();
             }
 
+            var assembly = Assembly.GetExecutingAssembly();
+            var types = assembly.GetTypes();
+
+            // using all attribute data sets in the assembly for now
+            mDataSet = new ProcessDataSet(ProcessObject);
+            foreach (var type in types)
+            {
+                var interfaces = type.GetInterfaces();
+                if (!interfaces.Contains(typeof(IAttributeDataSet)))
+                {
+                    continue;
+                }
+
+                var constructor = type.GetConstructor(BindingFlags.Public | BindingFlags.Instance, Array.Empty<Type>());
+                if (constructor == null)
+                {
+                    continue;
+                }
+
+                var instance = (IAttributeDataSet)constructor.Invoke(null);
+                mDataSet.AddAttributeDataSet(instance);
+            }
+
+            mDataSetView = null;
             AddContent();
 
             ProcessObject.EnableRaisingEvents = true;
             ProcessObject.Exited += OnExited;
+
+            if (!mExited)
+            {
+                mDataSet.StartRecording();
+            }
         }
 
         protected override void Dispose(bool disposing)
         {
             ProcessObject.Exited -= OnExited;
+            mDataSetView?.Dispose();
 
             base.Dispose(disposing);
         }
@@ -60,6 +93,11 @@ namespace ProcessMonitor.Views
             if (mExited)
             {
                 return;
+            }
+
+            if (mDataSet.IsRecording)
+            {
+                mDataSet.StopRecording();
             }
 
             Title += TitleSuffix;
@@ -103,6 +141,14 @@ namespace ProcessMonitor.Views
             UpdateStatusLabel();
             contentView.Add(mStatusLabel);
 
+            contentView.Add(mDataSetView = new DataSetView(mDataSet)
+            {
+                X = 0,
+                Y = 3,
+                Width = Dim.Fill(),
+                Height = Dim.Fill(1)
+            });
+
             const int padding = 2;
             const string closeButtonText = "Close";
 
@@ -129,7 +175,19 @@ namespace ProcessMonitor.Views
         public event Action<ProcessWindow>? OnClosed;
         public void Close()
         {
+            if (mDataSet.IsRecording)
+            {
+                mDataSet.StopRecording();
+            }
+
+            SaveQuery();
             OnClosed?.Invoke(this);
+        }
+
+        private void SaveQuery()
+        {
+            // todo: ask if the user wants to save data
+            Debugger.Break();
         }
 
         public Process ProcessObject { get; }
@@ -139,5 +197,8 @@ namespace ProcessMonitor.Views
 
         private bool mExited;
         private Label? mStatusLabel;
+
+        private readonly ProcessDataSet mDataSet;
+        private DataSetView? mDataSetView;
     }
 }

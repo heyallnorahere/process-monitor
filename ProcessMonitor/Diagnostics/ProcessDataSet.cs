@@ -22,6 +22,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Terminal.Gui.Graphs;
 
 namespace ProcessMonitor.Diagnostics
 {
@@ -30,6 +31,8 @@ namespace ProcessMonitor.Diagnostics
         public void Clear();
         public bool Remove(DateTime time);
         public void Record(DateTime time, Process process);
+
+        public void ConfigureAxis(ref VerticalAxis axis);
 
         public double this[DateTime time] { get; }
         public string DataName { get; }
@@ -184,6 +187,7 @@ namespace ProcessMonitor.Diagnostics
                 }
             };
 
+            data.ThreadObject.Start();
             sThreadData.Add(process.Id, data);
         }
 
@@ -195,6 +199,18 @@ namespace ProcessMonitor.Diagnostics
             mLock = new object();
             mDataSetKeys = new List<DateTime>();
             mAttributeDataSets = new Dictionary<Type, IAttributeDataSet>();
+        }
+
+        public bool IsRecording
+        {
+            get
+            {
+                lock (sThreadData)
+                {
+                    int pid = mProcess.Id;
+                    return !sThreadData.ContainsKey(pid) || !sThreadData[pid].Callbacks.ContainsKey(mID);
+                }
+            }
         }
 
         public bool StartRecording()
@@ -446,6 +462,19 @@ namespace ProcessMonitor.Diagnostics
                 {
                     return new List<IAttributeDataSet>(mAttributeDataSets.Values);
                 }
+            }
+        }
+
+        public DateTime? StartTime
+        {
+            get
+            {
+                if (mDataSetKeys.Count == 0)
+                {
+                    return null;
+                }
+
+                return mDataSetKeys[0];
             }
         }
 

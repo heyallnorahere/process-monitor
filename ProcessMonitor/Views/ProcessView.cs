@@ -35,7 +35,7 @@ namespace ProcessMonitor.Views
             }
 
             public override string ToString() => $"{Name} | {ID}";
-            public int CompareTo(ListedProcess? process) => Name.CompareTo(process!.Name);
+            public int CompareTo(ListedProcess? process) => ToString().CompareTo(process?.ToString());
 
             public string Name { get; }
             public int ID { get; }

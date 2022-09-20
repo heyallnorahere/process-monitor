@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Terminal.Gui.Graphs;
 
 namespace ProcessMonitor.Diagnostics
 {
@@ -87,6 +88,11 @@ namespace ProcessMonitor.Diagnostics
                 Value = value,
                 Usage = totalProcessorTime
             });
+        }
+
+        public void ConfigureAxis(ref VerticalAxis axis)
+        {
+            // nothing
         }
 
         public double this[DateTime time] => mRecord[time].Value;

@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Terminal.Gui.Graphs;
 
 namespace ProcessMonitor.Diagnostics
 {
@@ -45,6 +46,13 @@ namespace ProcessMonitor.Diagnostics
 
         public double this[DateTime time] => mRecord[time];
         public string DataName => "Memory usage";
+
+        public void ConfigureAxis(ref VerticalAxis axis)
+        {
+            axis.Increment = 1024;
+            axis.ShowLabelsEvery = 0;
+            //axis.LabelGetter = increment => increment.Value.ToString();
+        }
 
         private readonly Dictionary<DateTime, long> mRecord;
     }
