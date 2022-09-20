@@ -142,11 +142,17 @@ namespace ProcessMonitor.Tests
                 Process? startedProcess = null;
                 var autoResetEvent = new AutoResetEvent(false);
 
+                var addedPids = new HashSet<int>();
                 var onNew = (Process process) =>
                 {
                     if (startedProcess == null)
                     {
                         return;
+                    }
+
+                    lock (addedPids)
+                    {
+                        addedPids.Add(process.Id);
                     }
 
                     lock (startedProcess)
@@ -187,7 +193,13 @@ namespace ProcessMonitor.Tests
                 RunCommand(scriptPath, out startedProcess);
 
                 Assert.True(Monitor.IsWatching);
-                Assert.True(autoResetEvent.WaitOne(Monitor.SleepInterval * 5), "OnNewProcess did not trigger");
+                if (!autoResetEvent.WaitOne(Monitor.SleepInterval * 5))
+                {
+                    lock (addedPids)
+                    {
+                        Assert.True(addedPids.Contains(startedProcess.Id), "OnNewProcess did not trigger");
+                    }
+                }
 
                 lock (startedProcess)
                 {
