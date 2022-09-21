@@ -80,13 +80,21 @@ namespace ProcessMonitor.Tests
         private static string CreateTemporaryScript(string name)
         {
             bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-            string filename = "Hang." + (isWindows ? "bat" : "sh");
+            string extension = isWindows ? "bat" : "sh";
 
             var assembly = Assembly.GetExecutingAssembly();
-            string manifestName = $"{assembly.GetName().Name}.Scripts.{filename}";
+            string manifestName = $"{assembly.GetName().Name}.Scripts.{name}.{extension}";
+
+            string filename = string.Empty;
+            var rng = new Random();
+
+            for (int i = 0; i < rng.Next(5, 10); i++)
+            {
+                filename += (char)((int)'a' + rng.Next(0, 25));
+            }
 
             string tempDir = Path.GetTempPath();
-            string scriptPath = Path.Join(tempDir, filename);
+            string scriptPath = Path.Join(tempDir, $"{filename}.{extension}");
 
             {
                 using var inputStream = assembly.GetManifestResourceStream(manifestName);
