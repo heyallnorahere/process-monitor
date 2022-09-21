@@ -18,6 +18,8 @@ namespace ProcessMonitor.Tests
         private static readonly object sLock;
 
         private static readonly Type[] sDataSetTypes;
+        private static readonly Random sNameGenerator;
+
         static Diagnostics()
         {
             sInstanceCount = 0;
@@ -28,6 +30,8 @@ namespace ProcessMonitor.Tests
                 typeof(ProcessCPUDataSet),
                 typeof(ProcessMemoryDataSet)
             };
+
+            sNameGenerator = new Random();
         }
 
         public Diagnostics()
@@ -86,11 +90,9 @@ namespace ProcessMonitor.Tests
             string manifestName = $"{assembly.GetName().Name}.Scripts.{name}.{extension}";
 
             string filename = string.Empty;
-            var rng = new Random();
-
-            for (int i = 0; i < rng.Next(5, 10); i++)
+            for (int i = 0; i < sNameGenerator.Next(5, 10); i++)
             {
-                filename += (char)((int)'a' + rng.Next(0, 25));
+                filename += (char)((int)'a' + sNameGenerator.Next(0, 25));
             }
 
             string tempDir = Path.GetTempPath();
@@ -126,11 +128,23 @@ namespace ProcessMonitor.Tests
             return scriptPath;
         }
 
+        private static void DeleteScript(string path)
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+                // it doesn't really matter
+            }
+        }
+
         internal static void UseTemporaryScript(string name, Action<string> callback)
         {
             string path = CreateTemporaryScript(name);
             callback(path);
-            File.Delete(path);
+            DeleteScript(path);
         }
 
         internal static T UseTemporaryScript<T>(string name, Func<string, T> callback)
@@ -138,7 +152,7 @@ namespace ProcessMonitor.Tests
             string path = CreateTemporaryScript(name);
             var result = callback(path);
 
-            File.Delete(path);
+            DeleteScript(path);
             return result;
         }
 
