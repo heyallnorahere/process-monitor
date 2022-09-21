@@ -247,7 +247,7 @@ namespace ProcessMonitor.Diagnostics
             }
         }
 
-        public event Action? OnDataRecorded;
+        public event Action<DateTime>? OnDataRecorded;
         public bool Record()
         {
             if (mProcess.HasExited)
@@ -262,11 +262,11 @@ namespace ProcessMonitor.Diagnostics
                     return false;
                 }
 
-
                 bool succeeded = true;
                 var recorded = new List<IAttributeDataSet>();
-
                 var now = DateTime.Now;
+
+                mProcess.Refresh();
                 foreach (var set in mAttributeDataSets.Values)
                 {
                     try
@@ -284,7 +284,7 @@ namespace ProcessMonitor.Diagnostics
                 if (succeeded)
                 {
                     mDataSetKeys.Add(now);
-                    OnDataRecorded?.Invoke();
+                    OnDataRecorded?.Invoke(now);
 
                     return true;
                 }

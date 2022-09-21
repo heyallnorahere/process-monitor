@@ -33,7 +33,7 @@ namespace ProcessMonitor.Diagnostics
 
         public void Record(DateTime time, Process process)
         {
-            long value = process.WorkingSet64;
+            long value = process.VirtualMemorySize64;
             if (mRecord.ContainsKey(time))
             {
                 mRecord[time] = value;
@@ -49,9 +49,7 @@ namespace ProcessMonitor.Diagnostics
 
         public void ConfigureAxis(ref VerticalAxis axis)
         {
-            axis.Increment = 1024;
-            axis.ShowLabelsEvery = 0;
-            //axis.LabelGetter = increment => increment.Value.ToString();
+            // nothing
         }
 
         private readonly Dictionary<DateTime, long> mRecord;

@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 
 namespace ProcessMonitor
@@ -24,47 +25,77 @@ namespace ProcessMonitor
     public static class Monitor
     {
         private static readonly Dictionary<int, Process> sProcesses;
-        private static bool sStopWatching;
+        private static readonly AutoResetEvent sStopWatching;
         private static Thread? sWatcherThread;
+        private static readonly object sLock;
 
         static Monitor()
         {
             sProcesses = new Dictionary<int, Process>();
-            sStopWatching = false;
+            sStopWatching = new AutoResetEvent(false);
             sWatcherThread = null;
+            sLock = new object();
         }
 
         public static event Action<Process>? OnNewProcess;
         public static event Action<int>? OnProcessStopped;
 
-        public static bool IsWatching => sWatcherThread != null;
-        public static IEnumerable<Process> KnownProcesses => sProcesses.Values;
+        public static bool IsWatching
+        {
+            get
+            {
+                lock (sLock)
+                {
+                    return sWatcherThread != null;
+                }
+            }
+        }
+
+        public static IEnumerable<Process> KnownProcesses
+        {
+            get
+            {
+                lock (sLock)
+                {
+                    return sProcesses.Values.ToList();
+                }
+            }
+        }
 
         public static bool StartWatching()
         {
-            if (sWatcherThread != null)
+            lock (sLock)
             {
-                return false;
+                if (sWatcherThread != null)
+                {
+                    return false;
+                }
+
+                sWatcherThread = new Thread(WatchProcesses)
+                {
+                    Name = "Process watcher"
+                };
+
+                sWatcherThread.Start();
+                return true;
             }
-
-            sWatcherThread = new Thread(WatchProcesses)
-            {
-                Name = "Process watcher"
-            };
-
-            sWatcherThread.Start();
-            return true;
         }
 
         public static bool StopWatching()
         {
-            if (sWatcherThread == null)
+            Thread thread;
+            lock (sLock)
             {
-                return false;
+                if (sWatcherThread == null)
+                {
+                    return false;
+                }
+
+                thread = sWatcherThread;
             }
 
-            sStopWatching = true;
-            sWatcherThread.Join();
+            sStopWatching.Set();
+            thread.Join();
 
             return true;
         }
@@ -72,38 +103,47 @@ namespace ProcessMonitor
         public const int SleepInterval = 100;
         private static void WatchProcesses()
         {
-            while (!sStopWatching)
+            while (true)
             {
-                var processes = Process.GetProcesses();
-
-                var newProcesses = new List<Process>();
-                var stoppedProcesses = new List<int>();
-
-                foreach (var process in processes)
+                lock (sLock)
                 {
-                    if (!sProcesses.ContainsKey(process.Id))
+                    var processes = Process.GetProcesses();
+
+                    var newProcesses = new List<Process>();
+                    var stoppedProcesses = new List<int>();
+
+                    foreach (var process in processes)
                     {
-                        newProcesses.Add(process);
-                        OnNewProcess?.Invoke(process);
+                        if (!sProcesses.ContainsKey(process.Id))
+                        {
+                            newProcesses.Add(process);
+                            OnNewProcess?.Invoke(process);
+                        }
                     }
+
+                    foreach (var id in sProcesses.Keys)
+                    {
+                        if (Array.Find(processes, process => process.Id == id) == null)
+                        {
+                            stoppedProcesses.Add(id);
+                            OnProcessStopped?.Invoke(id);
+                        }
+                    }
+
+                    newProcesses.ForEach(process => sProcesses.Add(process.Id, process));
+                    stoppedProcesses.ForEach(id => sProcesses.Remove(id));
                 }
 
-                foreach (var id in sProcesses.Keys)
+                if (sStopWatching.WaitOne(SleepInterval))
                 {
-                    if (Array.Find(processes, process => process.Id == id) == null)
-                    {
-                        stoppedProcesses.Add(id);
-                        OnProcessStopped?.Invoke(id);
-                    }
+                    break;
                 }
-
-                newProcesses.ForEach(process => sProcesses.Add(process.Id, process));
-                stoppedProcesses.ForEach(id => sProcesses.Remove(id));
-
-                Thread.Sleep(SleepInterval);
             }
 
-            sStopWatching = false;
+            lock (sLock)
+            {
+                sWatcherThread = null;
+            }
         }
     }
 }

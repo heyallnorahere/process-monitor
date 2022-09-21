@@ -82,6 +82,11 @@ namespace ProcessMonitor.Views
 
         protected override void Dispose(bool disposing)
         {
+            if (mDataSet.IsRecording)
+            {
+                mDataSet.StopRecording();
+            }
+
             ProcessObject.Exited -= OnExited;
             mDataSetView?.Dispose();
 
@@ -146,7 +151,8 @@ namespace ProcessMonitor.Views
                 X = 0,
                 Y = 4,
                 Width = Dim.Fill(),
-                Height = Dim.Fill(2)
+                Height = Dim.Fill(2),
+                CanFocus = false
             });
 
             const int padding = 2;
@@ -187,7 +193,6 @@ namespace ProcessMonitor.Views
         private void SaveQuery()
         {
             // todo: ask if the user wants to save data
-            Debugger.Break();
         }
 
         public Process ProcessObject { get; }

@@ -17,27 +17,31 @@
 using ProcessMonitor.Diagnostics;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using Terminal.Gui;
 using Terminal.Gui.Graphs;
 
 namespace ProcessMonitor.Views
 {
-    public sealed class DataSetView : FrameView
+    public sealed class DataSetView : View
     {
         private class GraphData
         {
             public GraphData(IAttributeDataSet dataSet)
             {
                 DataSet = dataSet;
+                Row = null;
+
                 View = new GraphView
                 {
                     MarginBottom = 2,
                     MarginLeft = 3,
-                    CellSize = new PointF(2f, 1000f)
+                    CellSize = new PointF(2f, 1000f),
+                    CanFocus = false
                 };
 
-                View.AxisX.Increment = 30;
+                View.AxisX.Increment = 1;
                 View.AxisX.ShowLabelsEvery = 1;
                 View.AxisX.LabelGetter = increment => $"{increment.Value}s";
                 View.AxisX.Text = "Time ->";
@@ -71,17 +75,43 @@ namespace ProcessMonitor.Views
             public PathAnnotation Line { get; }
 
             public IAttributeDataSet DataSet { get; }
+            public DataRow? Row { get; set; }
         }
 
-        public DataSetView(ProcessDataSet dataSet) : base("Process metrics")
-        {
-            CanFocus = false;
+        private const string AttributeColumnName = "Attribute";
+        private const string ValueColumnName = "Value";
 
+        public DataSetView(ProcessDataSet dataSet)
+        {
             mDataSet = dataSet;
             mDataSet.OnDataRecorded += Update;
 
+            mLock = new object();
             mGraphs = new Dictionary<string, GraphData>();
-            AddGraphs();
+            mStats = new DataTable
+            {
+                TableName = "Process stats"
+            };
+
+            mStats.Columns.Add(new DataColumn
+            {
+                DataType = typeof(string),
+                ColumnName = AttributeColumnName,
+                AutoIncrement = false,
+                ReadOnly = true,
+                Unique = true
+            });
+
+            mStats.Columns.Add(new DataColumn
+            {
+                DataType = typeof(double),
+                ColumnName = ValueColumnName,
+                AutoIncrement = false,
+                ReadOnly = false,
+                Unique = false
+            });
+
+            AddContent();
         }
 
         protected override void Dispose(bool disposing)
@@ -92,7 +122,36 @@ namespace ProcessMonitor.Views
             }
         }
 
-        private void AddGraphs()
+        private void AddContent()
+        {
+            const int tableWidth = 30;
+            var graphView = new FrameView
+            {
+                X = 0,
+                Y = 0,
+                Width = Dim.Fill() - tableWidth,
+                Height = Dim.Fill(),
+                CanFocus = false,
+                Title = "Process metrics"
+            };
+
+            AddGraphs(graphView);
+            Add(graphView);
+
+            Add(new TableView
+            {
+                Table = mStats,
+                X = Pos.Right(this) - tableWidth,
+                Y = 0,
+                Width = tableWidth,
+                Height = Dim.Fill(),
+                CanFocus = false
+            });
+
+            TranslateData();
+        }
+
+        private void AddGraphs(View graphView)
         {
             var attributeDataSets = mDataSet.AttributeDataSets.ToList();
             if (attributeDataSets.Count == 0)
@@ -112,15 +171,18 @@ namespace ProcessMonitor.Views
                 data.View.X = data.View.Y = 0;
                 data.View.Width = data.View.Height = Dim.Fill();
 
-                Add(data.View);
+                graphView.Add(data.View);
                 mGraphs.Add(dataSet.DataName, data);
             }
-
-            TranslateData();
         }
 
-        private void Update()
+        private void Update(DateTime now)
         {
+            lock (mLock)
+            {
+                mLatestRecorded = now;
+            }
+
             Application.MainLoop.Invoke(() =>
             {
                 TranslateData();
@@ -129,6 +191,12 @@ namespace ProcessMonitor.Views
         }
 
         private void TranslateData()
+        {
+            TranslateGraphData();
+            TranslateTableData();
+        }
+
+        private void TranslateGraphData()
         {
             var compiledData = mDataSet.Compile();
 
@@ -157,7 +225,43 @@ namespace ProcessMonitor.Views
             }
         }
 
+        private void TranslateTableData()
+        {
+            DateTime? latestRecorded;
+            lock (mLock)
+            {
+                latestRecorded = mLatestRecorded;
+            }
+
+            foreach (var dataName in mGraphs.Keys)
+            {
+                var data = mGraphs[dataName];
+                if (data.Row == null)
+                {
+                    data.Row = mStats.NewRow();
+
+                    data.Row[AttributeColumnName] = dataName;
+                    data.Row[ValueColumnName] = 0;
+
+                    mStats.Rows.Add(data.Row);
+                }
+
+                if (latestRecorded.HasValue)
+                {
+                    var value = data.DataSet[latestRecorded.Value];
+
+                    data.Row[ValueColumnName] = value;
+                    data.Row.AcceptChanges();
+                }
+            }
+        }
+
         private readonly ProcessDataSet mDataSet;
         private readonly Dictionary<string, GraphData> mGraphs;
+        
+        private readonly DataTable mStats;
+
+        private DateTime? mLatestRecorded;
+        private readonly object mLock;
     }
 }
